@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Warkas</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#17231F">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Warkas">
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600&display=swap');
+  :root {
+    --ink:#17231F; --paper:#EDEAE0; --card:#F8F6EF; --amber:#E2932E;
+    --chili:#B23B2E; --teal:#2E6F63; --blue:#5B7CFA; --line:#DCD7C7;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: var(--paper); color: var(--ink); margin: 0; padding-bottom: 70px; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select { font-family: inherit; }
+  .hidden { display: none !important; }
+
+  #setupScreen { background: var(--ink); min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 24px 20px; }
+  #loginScreen { background: var(--ink); min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 24px 20px; }
+  .brand { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 28px; color: var(--paper); text-align: center; }
+  .brand span { color: var(--amber); }
+  .loginSub { text-align: center; font-size: 12px; color: #9CAA9F; margin: 6px 0 24px; }
+  .loginCard { background: var(--card); border-radius: 14px; padding: 18px; max-width: 340px; margin: 0 auto; }
+  .field-label { font-size: 11.5px; color: #7A857D; font-weight: 600; display: block; margin-bottom: 5px; }
+  .field { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 13.5px; margin-bottom: 12px; }
+  .btn { width: 100%; padding: 11px 0; border-radius: 9px; border: none; color: #fff; font-weight: 700; font-size: 13.5px; }
+  .btn-amber { background: var(--amber); }
+  .btn-teal { background: var(--teal); }
+  .btn-blue { background: var(--blue); }
+  .btn-chili { background: var(--chili); }
+  .errorMsg { color: var(--chili); font-size: 12px; margin-bottom: 8px; }
+
+  #appScreen header { background: var(--ink); padding: 16px; }
+  .headerTop { display: flex; justify-content: space-between; align-items: flex-start; }
+  .headerBrand { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; color: var(--paper); }
+  .headerBrand span { color: var(--amber); }
+  .userLine { font-size: 11px; color: #C7D0C9; margin-top: 4px; }
+  .logoutBtn { background: none; border: 1px solid #33443C; color: #C7D0C9; border-radius: 8px; padding: 6px 10px; font-size: 11px; }
+  .outletSwitch { display: flex; gap: 8px; margin-top: 12px; }
+  .outletPill { flex: 1; padding: 9px 8px; border-radius: 8px; border: 1px solid #33443C; background: transparent; color: #C7D0C9; font-weight: 600; font-size: 12.5px; text-align: center; }
+  .outletPill.active { background: var(--amber); color: var(--ink); border-color: var(--amber); }
+
+  main { padding: 14px; max-width: 480px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .sectionTitle { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; margin: 4px 0 10px; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .muted { color: #7A857D; font-size: 11px; }
+
+  nav#tabbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--ink); display: flex; border-top: 1px solid #2B372F; padding-bottom: env(safe-area-inset-bottom); }
+  nav#tabbar button { flex: 1; background: none; border: none; padding: 10px 2px 8px; color: #7C897E; font-size: 10.5px; font-weight: 600; }
+  nav#tabbar button.active { color: var(--amber); }
+
+  .prodRow { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .prodRow:last-child { border-bottom: none; }
+  .qtyBtn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: #fff; font-weight: 700; }
+  .channelPill { padding: 6px 11px; border-radius: 20px; border: 1.5px solid var(--line); background: #fff; font-size: 11.5px; font-weight: 700; color: #54605A; margin-right: 6px; margin-bottom: 6px; }
+  .channelPill.active { background: var(--teal); border-color: var(--teal); color: #fff; }
+
+  .toast { position: fixed; bottom: 80px; left: 14px; right: 14px; max-width: 452px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; z-index: 50; }
+  .toast.err { background: #FBEAE6; border: 1px solid var(--chili); color: #7A2E24; }
+  .toast.ok { background: #E2F0EC; border: 1px solid var(--teal); color: #1a4a40; }
+
+  .stokBar { height: 5px; background: #E5E1D3; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .stokBar div { height: 100%; }
+  .locTab { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line); background: #fff; font-size: 11px; font-weight: 600; margin-right: 6px; }
+  .locTab.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: var(--teal); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -3px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ===== SETUP (isi sekali, tersimpan di HP) ===== -->
+<div id="setupScreen" class="hidden">
+  <div class="brand">Warkas<span>.</span></div>
+  <div class="loginSub">Sambungkan ke Google Sheets kamu (sekali saja)</div>
+  <div class="loginCard">
+    <label class="field-label">URL Apps Script (diakhiri /exec)</label>
+    <input class="field" id="setupUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <div class="errorMsg hidden" id="setupError"></div>
+    <button class="btn btn-amber" id="setupBtn" onclick="saveApiUrl()">Simpan & Lanjut</button>
+  </div>
+</div>
+
+<!-- ===== LOGIN ===== -->
+<div id="loginScreen" class="hidden">
+  <div class="brand">Warkas<span>.</span></div>
+  <div class="loginSub">Masuk sesuai peran kamu</div>
+  <div class="loginCard">
+    <label class="field-label">Username</label>
+    <input class="field" id="loginUser" placeholder="mis. owner">
+    <label class="field-label">Password</label>
+    <input class="field" id="loginPass" type="password" placeholder="••••">
+    <div class="errorMsg hidden" id="loginError"></div>
+    <button class="btn btn-amber" id="loginBtn" onclick="doLogin()">Masuk</button>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="appScreen" class="hidden">
+  <header>
+    <div class="headerTop">
+      <div>
+        <div class="headerBrand">Warkas<span>.</span></div>
+        <div class="userLine" id="userLine"></div>
+      </div>
+      <button class="logoutBtn" onclick="logout()">Keluar</button>
+    </div>
+    <div class="outletSwitch" id="outletSwitch"></div>
+  </header>
+
+  <main id="mainContent"></main>
+
+  <nav id="tabbar"></nav>
+</div>
+
+<div id="toastContainer"></div>
+
+<script>
+// ---------- KONFIGURASI API ----------
+let API_URL = localStorage.getItem('warkas_api_url') || '';
+
+async function panggilAPI(action, payload) {
+  const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: action, payload: payload || {} }) });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Terjadi kesalahan di server.');
+  return json.data;
+}
+
+// ---------- STATE ----------
+let state = {
+  user: null, outlet: null, bootstrap: null, transaksi: null,
+  tab: 'jual', cart: [], channel: 'offline',
+};
+
+const TABS = [
+  { id: 'jual', label: 'Jual' },
+  { id: 'beli', label: 'Beli' },
+  { id: 'transfer', label: 'Transfer' },
+  { id: 'stok', label: 'Stok' },
+  { id: 'riwayat', label: 'Riwayat' },
+  { id: 'presensi', label: 'Presensi' },
+];
+const PERMISSIONS = {
+  kasir: ['jual', 'stok', 'riwayat', 'presensi'],
+  gudang: ['beli', 'transfer', 'stok', 'presensi'],
+  pemilik: ['jual', 'beli', 'transfer', 'stok', 'riwayat', 'presensi'],
+};
+const CHANNELS = [
+  { id: 'offline', label: 'Datang langsung', komisi: 0 },
+  { id: 'gofood', label: 'GoFood', komisi: 20 },
+  { id: 'shopeefood', label: 'ShopeeFood', komisi: 20 },
+  { id: 'grabfood', label: 'GrabFood', komisi: 18 },
+];
+
+function fmtIDR(n) { return 'Rp' + Math.round(n || 0).toLocaleString('id-ID'); }
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function showToast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (isErr ? 'err' : 'ok');
+  el.innerHTML = msg;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ---------- SETUP AWAL ----------
+function initApp() {
+  if (!API_URL) {
+    document.getElementById('setupScreen').classList.remove('hidden');
+  } else {
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+}
+async function saveApiUrl() {
+  const url = document.getElementById('setupUrl').value.trim();
+  const btn = document.getElementById('setupBtn');
+  const errBox = document.getElementById('setupError');
+  errBox.classList.add('hidden');
+  if (!url) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Menguji koneksi...';
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!json.ok) throw new Error('Server merespons tapi tidak sesuai format.');
+    localStorage.setItem('warkas_api_url', url);
+    API_URL = url;
+    document.getElementById('setupScreen').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+  } catch (e) {
+    errBox.innerText = 'Gagal konek: ' + e.message + '. Cek lagi URL-nya.';
+    errBox.classList.remove('hidden');
+    btn.disabled = false;
+    btn.innerText = 'Simpan & Lanjut';
+  }
+}
+
+// ---------- LOGIN ----------
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const btn = document.getElementById('loginBtn');
+  const errBox = document.getElementById('loginError');
+  errBox.classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Memproses...';
+  try {
+    const user = await panggilAPI('login', { username: username, password: password });
+    state.user = user;
+    await loadBootstrapAndEnter();
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerText = 'Masuk';
+    errBox.innerText = e.message || 'Gagal login.';
+    errBox.classList.remove('hidden');
+  }
+}
+
+function logout() {
+  state = { user: null, outlet: null, bootstrap: null, transaksi: null, tab: 'jual', cart: [], channel: 'offline' };
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginBtn').disabled = false;
+  document.getElementById('loginBtn').innerText = 'Masuk';
+}
+
+async function loadBootstrapAndEnter() {
+  try {
+    const boot = await panggilAPI('getBootstrap', {});
+    state.bootstrap = boot;
+    const role = state.user.role;
+    state.outlet = state.user.outlet || (role === 'gudang' ? boot.gudangNama : boot.outlets[0]);
+    if (PERMISSIONS[role].indexOf(state.tab) === -1) state.tab = PERMISSIONS[role][0];
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('appScreen').classList.remove('hidden');
+    renderHeader();
+    renderTabbar();
+    await loadTransaksiThenRender();
+  } catch (e) {
+    alert('Gagal mengambil data: ' + e.message);
+  }
+}
+
+async function loadTransaksiThenRender() {
+  try {
+    state.transaksi = await panggilAPI('getTransaksi', {});
+  } catch (e) {
+    state.transaksi = { jual: [], beli: [], transfer: [] };
+  }
+  renderTab();
+}
+
+// ---------- HEADER ----------
+function renderHeader() {
+  document.getElementById('userLine').innerText = state.user.nama + ' · ' + state.user.role;
+  const sw = document.getElementById('outletSwitch');
+  if (state.user.role === 'gudang') {
+    sw.innerHTML = '<div class="muted" style="color:#9CAA9F">📦 Bertugas di ' + escapeHtml(state.bootstrap.gudangNama) + '</div>';
+    return;
+  }
+  const locked = state.user.role === 'kasir';
+  sw.innerHTML = state.bootstrap.outlets.map(function (o) {
+    const active = o === state.outlet;
+    return '<button class="outletPill' + (active ? ' active' : '') + '" ' +
+      (locked ? 'disabled style="opacity:' + (active ? '1' : '0.35') + '"' : 'onclick="switchOutlet(\'' + o + '\')"') +
+      '>' + escapeHtml(o) + '</button>';
+  }).join('');
+}
+function switchOutlet(o) {
+  state.outlet = o;
+  renderHeader();
+  renderTab();
+}
+
+// ---------- TABBAR ----------
+function renderTabbar() {
+  const nav = document.getElementById('tabbar');
+  const allowed = PERMISSIONS[state.user.role];
+  nav.innerHTML = TABS.filter(function (t) { return allowed.indexOf(t.id) !== -1; }).map(function (t) {
+    return '<button class="' + (state.tab === t.id ? 'active' : '') + '" onclick="switchTab(\'' + t.id + '\')">' + t.label + '</button>';
+  }).join('');
+}
+function switchTab(id) {
+  state.tab = id;
+  renderTabbar();
+  renderTab();
+}
+
+// ---------- MAIN RENDER ROUTER ----------
+function renderTab() {
+  const main = document.getElementById('mainContent');
+  if (state.tab === 'jual') main.innerHTML = renderJual();
+  if (state.tab === 'beli') main.innerHTML = renderBeli();
+  if (state.tab === 'transfer') main.innerHTML = renderTransfer();
+  if (state.tab === 'stok') main.innerHTML = renderStok();
+  if (state.tab === 'riwayat') main.innerHTML = renderRiwayat();
+  if (state.tab === 'presensi') renderPresensi();
+}
+
+// ---------- TAB: JUAL ----------
+function renderJual() {
+  const produk = state.bootstrap.produk.filter(function (p) { return p.outlets.indexOf(state.outlet) !== -1; });
+  const ch = CHANNELS.find(function (c) { return c.id === state.channel; });
+
+  let html = '<div class="sectionTitle">Catat penjualan — ' + escapeHtml(state.outlet) + '</div>';
+  html += '<div style="margin-bottom:12px">';
+  CHANNELS.forEach(function (c) {
+    html += '<button class="channelPill' + (c.id === state.channel ? ' active' : '') + '" onclick="setChannel(\'' + c.id + '\')">' + c.label + '</button>';
+  });
+  if (ch.komisi > 0) html += '<div class="muted" style="margin-top:4px">Potongan komisi ' + ch.label + ': <b style="color:var(--chili)">' + ch.komisi + '%</b></div>';
+  html += '</div>';
+
+  html += '<div class="sectionTitle">Pilih produk</div>';
+  produk.forEach(function (p) {
+    const harga = state.channel === 'offline' ? p.harga : p.hargaOnline;
+    const q = getCartQtyInput(p.id);
+    html += '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between"><b>' + escapeHtml(p.nama) + '</b>' +
+      '<span class="mono">' + fmtIDR(harga) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">' +
+      '<div><button class="qtyBtn" onclick="stepQty(\'' + p.id + '\',-1)">−</button> ' +
+      '<span class="mono" id="qty_' + p.id + '" style="display:inline-block;width:24px;text-align:center">' + q + '</span> ' +
+      '<button class="qtyBtn" onclick="stepQty(\'' + p.id + '\',1)">+</button></div>' +
+      '<button class="btn btn-teal" style="width:auto;padding:8px 14px" onclick="addToCart(\'' + p.id + '\')">+ Keranjang</button>' +
+      '</div></div>';
+  });
+
+  if (state.cart.length > 0) {
+    html += '<div class="sectionTitle" style="margin-top:16px">Keranjang</div><div class="card">';
+    let subtotal = 0;
+    state.cart.forEach(function (it) {
+      const p = state.bootstrap.produk.find(function (x) { return x.id === it.produkId; });
+      const harga = state.channel === 'offline' ? p.harga : p.hargaOnline;
+      subtotal += harga * it.qty;
+      html += '<div class="prodRow"><span>' + escapeHtml(p.nama) + ' x' + it.qty + '</span>' +
+        '<span><span class="mono">' + fmtIDR(harga * it.qty) + '</span> ' +
+        '<button onclick="removeFromCart(\'' + it.produkId + '\')" style="background:none;border:none;color:var(--chili);font-weight:700">✕</button></span></div>';
+    });
+    html += '<div style="display:flex;justify-content:space-between;font-weight:700;padding-top:8px">Total<span class="mono">' + fmtIDR(subtotal) + '</span></div>';
+    html += '<button class="btn btn-teal" style="margin-top:10px" onclick="checkout()">Selesaikan Pesanan</button>';
+    html += '</div>';
+  }
+  return html;
+}
+
+let qtyInputs = {};
+function getCartQtyInput(id) { return qtyInputs[id] || 1; }
+function stepQty(id, delta) {
+  qtyInputs[id] = Math.max(1, (qtyInputs[id] || 1) + delta);
+  document.getElementById('qty_' + id).innerText = qtyInputs[id];
+}
+function setChannel(id) { state.channel = id; renderTab(); }
+function addToCart(produkId) {
+  const qty = qtyInputs[produkId] || 1;
+  const existing = state.cart.find(function (c) { return c.produkId === produkId; });
+  if (existing) existing.qty += qty; else state.cart.push({ produkId: produkId, qty: qty });
+  qtyInputs[produkId] = 1;
+  renderTab();
+}
+function removeFromCart(produkId) {
+  state.cart = state.cart.filter(function (c) { return c.produkId !== produkId; });
+  renderTab();
+}
+async function checkout() {
+  if (state.cart.length === 0) return;
+  showToast('<span class="spinner"></span> Memproses pesanan...', false);
+  try {
+    const hasil = await panggilAPI('recordSale', { lokasi: state.outlet, oleh: state.user.nama, channel: state.channel, items: state.cart });
+    showToast('✅ Order #' + hasil.orderNo + ' tercatat. Total ' + fmtIDR(hasil.totalBersih), false);
+    state.cart = [];
+    await loadBootstrapAndEnter();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+// ---------- TAB: BELI ----------
+function renderBeli() {
+  const bahan = state.bootstrap.bahan;
+  let html = '<div class="sectionTitle">Catat pembelian dari supplier</div><div class="card">';
+  html += '<label class="field-label">Bahan baku</label><select class="field" id="beliBahan">';
+  bahan.forEach(function (b) { html += '<option value="' + b.id + '">' + escapeHtml(b.nama) + ' (gudang: ' + (b.stok[state.bootstrap.gudangNama] || 0) + b.satuan + ')</option>'; });
+  html += '</select>';
+  html += '<label class="field-label">Jumlah masuk</label><input class="field" type="number" id="beliQty" value="1000">';
+  html += '<label class="field-label">Harga per satuan (opsional)</label><input class="field" type="number" id="beliHarga" value="0">';
+  html += '<button class="btn btn-amber" onclick="submitBeli()">+ Tambah ke stok gudang</button>';
+  html += '</div>';
+  return html;
+}
+async function submitBeli() {
+  const bahanId = document.getElementById('beliBahan').value;
+  const qty = Number(document.getElementById('beliQty').value);
+  const harga = Number(document.getElementById('beliHarga').value);
+  if (!qty || qty <= 0) return;
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    const hasil = await panggilAPI('recordPurchase', { bahanId: bahanId, qty: qty, hargaSatuan: harga, oleh: state.user.nama });
+    showToast('✅ Stok gudang bertambah ' + qty + '. Total belanja ' + fmtIDR(hasil.totalHarga), false);
+    await loadBootstrapAndEnter();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+// ---------- TAB: TRANSFER ----------
+function renderTransfer() {
+  const bahan = state.bootstrap.bahan;
+  let html = '<div class="sectionTitle">Transfer stok ke outlet</div><div class="card">';
+  html += '<label class="field-label">Bahan baku</label><select class="field" id="trBahan">';
+  bahan.forEach(function (b) { html += '<option value="' + b.id + '">' + escapeHtml(b.nama) + ' (gudang: ' + (b.stok[state.bootstrap.gudangNama] || 0) + b.satuan + ')</option>'; });
+  html += '</select>';
+  html += '<label class="field-label">Kirim ke outlet</label><select class="field" id="trTujuan">';
+  state.bootstrap.outlets.forEach(function (o) { html += '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>'; });
+  html += '</select>';
+  html += '<label class="field-label">Jumlah dipindah</label><input class="field" type="number" id="trQty" value="500">';
+  html += '<button class="btn btn-blue" onclick="submitTransfer()">Kirim</button>';
+  html += '</div>';
+  return html;
+}
+async function submitTransfer() {
+  const bahanId = document.getElementById('trBahan').value;
+  const keLokasi = document.getElementById('trTujuan').value;
+  const qty = Number(document.getElementById('trQty').value);
+  if (!qty || qty <= 0) return;
+  showToast('<span class="spinner"></span> Memproses transfer...', false);
+  try {
+    await panggilAPI('recordTransfer', { bahanId: bahanId, qty: qty, keLokasi: keLokasi, oleh: state.user.nama });
+    showToast('✅ Transfer berhasil.', false);
+    await loadBootstrapAndEnter();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+// ---------- TAB: STOK ----------
+let stokLokasiAktif = null;
+function renderStok() {
+  const bahan = state.bootstrap.bahan;
+  const lokasiList = [state.bootstrap.gudangNama].concat(state.bootstrap.outlets);
+  if (!stokLokasiAktif) stokLokasiAktif = lokasiList[0];
+  let html = '<div class="sectionTitle">Stok per lokasi</div><div style="margin-bottom:12px">';
+  lokasiList.forEach(function (l) {
+    html += '<button class="locTab' + (l === stokLokasiAktif ? ' active' : '') + '" onclick="setStokLokasi(\'' + escapeHtml(l) + '\')">' + (l === state.bootstrap.gudangNama ? 'Gudang' : l.replace('Outlet ', '')) + '</button>';
+  });
+  html += '</div>';
+  bahan.forEach(function (b) {
+    const qty = b.stok[stokLokasiAktif] || 0;
+    const isGudang = stokLokasiAktif === state.bootstrap.gudangNama;
+    const threshold = isGudang ? b.stokMinimum * 3 : b.stokMinimum;
+    const low = qty <= threshold;
+    const pct = Math.min(100, (qty / (threshold * 2 || 1)) * 100);
+    html += '<div class="card"><div style="display:flex;justify-content:space-between"><b>' + escapeHtml(b.nama) + '</b>' +
+      '<span class="mono" style="color:' + (low ? 'var(--chili)' : 'var(--ink)') + '">' + qty + b.satuan + '</span></div>' +
+      '<div class="stokBar"><div style="width:' + pct + '%;background:' + (low ? 'var(--chili)' : (isGudang ? 'var(--blue)' : 'var(--teal)')) + '"></div></div></div>';
+  });
+  return html;
+}
+function setStokLokasi(l) { stokLokasiAktif = l; renderTab(); }
+
+// ---------- TAB: RIWAYAT ----------
+function renderRiwayat() {
+  const t = state.transaksi || { jual: [], beli: [], transfer: [] };
+  const jual = t.jual.filter(function (j) { return j.lokasi === state.outlet; });
+  let html = '<div class="sectionTitle">Riwayat penjualan — ' + escapeHtml(state.outlet) + '</div>';
+  if (jual.length === 0) html += '<div class="muted">Belum ada transaksi.</div>';
+  jual.forEach(function (j) {
+    html += '<div class="card"><div style="display:flex;justify-content:space-between">' +
+      '<div><span class="mono muted">#' + escapeHtml(j.orderNo) + '</span><br>' +
+      '<span style="font-size:12.5px">' + (j.items || []).map(function (it) { return escapeHtml(it.namaProduk) + ' x' + it.qty; }).join(', ') + '</span></div>' +
+      '<span class="mono" style="font-weight:700;color:var(--teal)">' + fmtIDR(j.totalBersih) + '</span></div></div>';
+  });
+
+  html += '<div class="sectionTitle" style="margin-top:16px">Pembelian & transfer terbaru</div>';
+  const gabung = t.beli.slice(0, 10).map(function (b) { return { tipe: 'Beli', teks: b.bahanId + ' +' + b.qty, waktu: b.waktu }; })
+    .concat(t.transfer.slice(0, 10).map(function (tr) { return { tipe: 'Transfer', teks: tr.bahanId + ' ' + tr.qty + ' → ' + tr.keLokasi, waktu: tr.waktu }; }));
+  if (gabung.length === 0) html += '<div class="muted">Belum ada.</div>';
+  gabung.forEach(function (g) {
+    html += '<div class="card" style="padding:9px 12px"><span class="muted">' + g.tipe + '</span> — ' + escapeHtml(g.teks) + '</div>';
+  });
+  return html;
+}
+
+// ---------- TAB: PRESENSI ----------
+let presensiSaya = [];
+async function renderPresensi() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = '<div class="sectionTitle">Presensi saya</div><div class="card" id="presensiCard" style="text-align:center;padding:20px"><span class="spinner"></span></div>' +
+    '<div class="sectionTitle" style="margin-top:16px">Riwayat</div><div id="presensiHistory"></div>';
+
+  const emp = (state.bootstrap.employees || []).find(function (e) { return e.id === state.user.username; });
+  try {
+    presensiSaya = await panggilAPI('getPresensiSaya', { pegawaiId: state.user.username });
+    renderPresensiCard(emp);
+    renderPresensiHistory(presensiSaya);
+  } catch (e) {
+    presensiSaya = [];
+    renderPresensiCard(emp);
+    document.getElementById('presensiHistory').innerHTML = '<div class="muted">Gagal memuat riwayat.</div>';
+  }
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function renderPresensiCard(emp) {
+  const card = document.getElementById('presensiCard');
+  const hariIni = presensiSaya.find(function (p) { return p.tanggal === todayStr(); });
+  const shiftInfo = emp && emp.shiftMulai ? '<div class="muted">Shift ' + escapeHtml(emp.shiftNama || '') + ': ' + emp.shiftMulai + '–' + emp.shiftSelesai + '</div>' : '';
+
+  if (!hariIni || !hariIni.jamMasuk) {
+    card.innerHTML = shiftInfo + '<button class="btn btn-teal" style="margin-top:10px" onclick="absenMasuk()">⏰ Absen Masuk</button>';
+  } else if (!hariIni.jamPulang) {
+    card.innerHTML = shiftInfo +
+      '<div style="margin-top:8px">Masuk jam <b class="mono">' + hariIni.jamMasuk + '</b>' + (hariIni.status === 'telat' ? ' <span style="color:var(--chili)">· telat</span>' : '') + '</div>' +
+      '<button class="btn btn-amber" style="margin-top:10px" onclick="absenPulang()">Absen Pulang</button>';
+  } else {
+    card.innerHTML = '<div style="color:var(--teal);font-weight:700">✅ Sudah absen: ' + hariIni.jamMasuk + ' – ' + hariIni.jamPulang + '</div>';
+  }
+}
+
+function renderPresensiHistory(list) {
+  const el = document.getElementById('presensiHistory');
+  if (list.length === 0) { el.innerHTML = '<div class="muted">Belum ada riwayat.</div>'; return; }
+  el.innerHTML = list.slice(0, 12).map(function (p) {
+    const color = p.status === 'hadir' ? 'var(--teal)' : p.status === 'telat' ? 'var(--amber)' : 'var(--chili)';
+    return '<div class="card" style="display:flex;justify-content:space-between;padding:9px 12px">' +
+      '<span>' + escapeHtml(p.tanggal) + '</span>' +
+      '<span class="mono" style="color:' + color + '">' + (p.jamMasuk ? p.jamMasuk + '–' + (p.jamPulang || '...') : '-') + ' · ' + p.status + '</span></div>';
+  }).join('');
+}
+
+async function absenMasuk() {
+  showToast('<span class="spinner"></span> Mencatat...', false);
+  try {
+    await panggilAPI('recordAbsen', { pegawaiId: state.user.username, tipe: 'masuk' });
+    showToast('✅ Absen masuk tercatat.', false);
+    renderTab();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+async function absenPulang() {
+  showToast('<span class="spinner"></span> Mencatat...', false);
+  try {
+    await panggilAPI('recordAbsen', { pegawaiId: state.user.username, tipe: 'pulang' });
+    showToast('✅ Absen pulang tercatat.', false);
+    renderTab();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+// ---------- ENTER KEY ----------
+document.getElementById('loginPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+document.getElementById('setupUrl').addEventListener('keydown', function (e) { if (e.key === 'Enter') saveApiUrl(); });
+
+// ---------- SERVICE WORKER ----------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('service-worker.js').catch(function () {});
+  });
+}
+
+initApp();
+</script>
+</body>
+</html>
