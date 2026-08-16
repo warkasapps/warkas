@@ -56,8 +56,8 @@
   .mono { font-family: 'IBM Plex Mono', monospace; }
   .muted { color: #7A857D; font-size: 11px; }
 
-  nav#tabbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--ink); display: flex; border-top: 1px solid #2B372F; padding-bottom: env(safe-area-inset-bottom); }
-  nav#tabbar button { flex: 1; background: none; border: none; padding: 10px 2px 8px; color: #7C897E; font-size: 10.5px; font-weight: 600; }
+  nav#tabbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--ink); display: flex; border-top: 1px solid #2B372F; padding-bottom: env(safe-area-inset-bottom); overflow-x: auto; }
+  nav#tabbar button { flex: 0 0 auto; min-width: 64px; background: none; border: none; padding: 10px 6px 8px; color: #7C897E; font-size: 10.5px; font-weight: 600; white-space: nowrap; }
   nav#tabbar button.active { color: var(--amber); }
 
   .prodRow { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--line); }
@@ -183,11 +183,15 @@ const TABS = [
   { id: 'stok', label: 'Stok' },
   { id: 'riwayat', label: 'Riwayat' },
   { id: 'presensi', label: 'Presensi' },
+  { id: 'karyawan', label: 'Karyawan' },
+  { id: 'biaya', label: 'Biaya' },
+  { id: 'laporan', label: 'Laporan' },
+  { id: 'resep', label: 'Resep' },
 ];
 const PERMISSIONS = {
   kasir: ['jual', 'stok', 'riwayat', 'presensi'],
   gudang: ['beli', 'transfer', 'stok', 'presensi'],
-  pemilik: ['jual', 'beli', 'transfer', 'stok', 'riwayat', 'presensi'],
+  pemilik: ['jual', 'beli', 'transfer', 'stok', 'riwayat', 'presensi', 'karyawan', 'biaya', 'laporan', 'resep'],
 };
 const CHANNELS = [
   { id: 'offline', label: 'Datang langsung', komisi: 0 },
@@ -340,6 +344,10 @@ function renderTab() {
   if (state.tab === 'stok') main.innerHTML = renderStok();
   if (state.tab === 'riwayat') main.innerHTML = renderRiwayat();
   if (state.tab === 'presensi') renderPresensi();
+  if (state.tab === 'karyawan') renderKaryawan();
+  if (state.tab === 'biaya') main.innerHTML = renderBiaya();
+  if (state.tab === 'laporan') renderLaporan();
+  if (state.tab === 'resep') main.innerHTML = renderResep();
 }
 
 // ---------- TAB: JUAL ----------
@@ -354,6 +362,15 @@ function renderJual() {
   });
   if (ch.komisi > 0) html += '<div class="muted" style="margin-top:4px">Potongan komisi ' + ch.label + ': <b style="color:var(--chili)">' + ch.komisi + '%</b></div>';
   html += '</div>';
+
+  if (state.channel === 'offline') {
+    html += '<div class="card" style="margin-bottom:12px">' +
+      '<label class="field-label">Nama pelanggan (opsional)</label><input class="field" id="pelangganNama" placeholder="mis. Bu Rina" style="margin-bottom:8px">' +
+      '<label class="field-label">No. HP (opsional)</label><input class="field" id="pelangganHp" placeholder="08xx xxxx xxxx" style="margin-bottom:0">' +
+      '</div>';
+  } else {
+    html += '<div class="muted" style="margin-bottom:12px;font-style:italic">Data pelanggan tidak tersedia untuk pesanan online.</div>';
+  }
 
   html += '<div class="sectionTitle">Pilih produk</div>';
   produk.forEach(function (p) {
@@ -409,8 +426,10 @@ function removeFromCart(produkId) {
 async function checkout() {
   if (state.cart.length === 0) return;
   showToast('<span class="spinner"></span> Memproses pesanan...', false);
+  const pelangganNama = state.channel === 'offline' && document.getElementById('pelangganNama') ? document.getElementById('pelangganNama').value.trim() : '';
+  const pelangganHp = state.channel === 'offline' && document.getElementById('pelangganHp') ? document.getElementById('pelangganHp').value.trim() : '';
   try {
-    const hasil = await panggilAPI('recordSale', { lokasi: state.outlet, oleh: state.user.nama, channel: state.channel, items: state.cart });
+    const hasil = await panggilAPI('recordSale', { lokasi: state.outlet, oleh: state.user.nama, channel: state.channel, items: state.cart, pelangganNama: pelangganNama, pelangganHp: pelangganHp });
     showToast('✅ Order #' + hasil.orderNo + ' tercatat. Total ' + fmtIDR(hasil.totalBersih), false);
     state.cart = [];
     await loadBootstrapAndEnter();
@@ -422,24 +441,40 @@ async function checkout() {
 // ---------- TAB: BELI ----------
 function renderBeli() {
   const bahan = state.bootstrap.bahan;
+  const supplierAll = state.bootstrap.supplier || [];
+  const firstBahanId = bahan[0] ? bahan[0].id : '';
   let html = '<div class="sectionTitle">Catat pembelian dari supplier</div><div class="card">';
-  html += '<label class="field-label">Bahan baku</label><select class="field" id="beliBahan">';
+  html += '<label class="field-label">Bahan baku</label><select class="field" id="beliBahan" onchange="updateSupplierBeli()">';
   bahan.forEach(function (b) { html += '<option value="' + b.id + '">' + escapeHtml(b.nama) + ' (gudang: ' + (b.stok[state.bootstrap.gudangNama] || 0) + b.satuan + ')</option>'; });
   html += '</select>';
+  html += '<label class="field-label">Beli dari supplier</label><select class="field" id="beliSupplier"></select>';
   html += '<label class="field-label">Jumlah masuk</label><input class="field" type="number" id="beliQty" value="1000">';
   html += '<label class="field-label">Harga per satuan (opsional)</label><input class="field" type="number" id="beliHarga" value="0">';
   html += '<button class="btn btn-amber" onclick="submitBeli()">+ Tambah ke stok gudang</button>';
   html += '</div>';
+  setTimeout(updateSupplierBeli, 0);
   return html;
+}
+function updateSupplierBeli() {
+  const bahanId = document.getElementById('beliBahan').value;
+  const supplierAll = state.bootstrap.supplier || [];
+  const cocok = supplierAll.filter(function (s) { return s.bahan.indexOf(bahanId) !== -1; });
+  const sel = document.getElementById('beliSupplier');
+  if (cocok.length === 0) {
+    sel.innerHTML = '<option value="">— belum ada supplier terdaftar —</option>';
+  } else {
+    sel.innerHTML = cocok.map(function (s) { return '<option value="' + s.id + '">' + escapeHtml(s.nama) + '</option>'; }).join('');
+  }
 }
 async function submitBeli() {
   const bahanId = document.getElementById('beliBahan').value;
+  const supplierId = document.getElementById('beliSupplier').value;
   const qty = Number(document.getElementById('beliQty').value);
   const harga = Number(document.getElementById('beliHarga').value);
   if (!qty || qty <= 0) return;
   showToast('<span class="spinner"></span> Menyimpan...', false);
   try {
-    const hasil = await panggilAPI('recordPurchase', { bahanId: bahanId, qty: qty, hargaSatuan: harga, oleh: state.user.nama });
+    const hasil = await panggilAPI('recordPurchase', { bahanId: bahanId, qty: qty, supplierId: supplierId, hargaSatuan: harga, oleh: state.user.nama });
     showToast('✅ Stok gudang bertambah ' + qty + '. Total belanja ' + fmtIDR(hasil.totalHarga), false);
     await loadBootstrapAndEnter();
   } catch (e) {
@@ -503,14 +538,40 @@ function renderStok() {
 function setStokLokasi(l) { stokLokasiAktif = l; renderTab(); }
 
 // ---------- TAB: RIWAYAT ----------
+let riwayatSubView = 'order';
 function renderRiwayat() {
   const t = state.transaksi || { jual: [], beli: [], transfer: [] };
   const jual = t.jual.filter(function (j) { return j.lokasi === state.outlet; });
-  let html = '<div class="sectionTitle">Riwayat penjualan — ' + escapeHtml(state.outlet) + '</div>';
+
+  let html = '<div style="display:flex;gap:6px;margin-bottom:12px">' +
+    '<button class="locTab' + (riwayatSubView === 'order' ? ' active' : '') + '" onclick="setRiwayatSubView(\'order\')">Per Order</button>' +
+    '<button class="locTab' + (riwayatSubView === 'pelanggan' ? ' active' : '') + '" onclick="setRiwayatSubView(\'pelanggan\')">Per Pelanggan</button>' +
+    '</div>';
+
+  if (riwayatSubView === 'pelanggan') {
+    const grup = {};
+    jual.filter(function (j) { return j.pelangganNama; }).forEach(function (j) {
+      const key = j.pelangganHp || j.pelangganNama;
+      if (!grup[key]) grup[key] = { nama: j.pelangganNama, hp: j.pelangganHp, transaksi: [], total: 0 };
+      grup[key].transaksi.push(j);
+      grup[key].total += j.totalBersih;
+    });
+    const list = Object.values(grup).sort(function (a, b) { return b.total - a.total; });
+    html += '<div class="sectionTitle">Pelanggan — ' + escapeHtml(state.outlet) + '</div>';
+    if (list.length === 0) html += '<div class="muted">Belum ada pelanggan tercatat. Isi nama pelanggan saat jual offline.</div>';
+    list.forEach(function (g) {
+      html += '<div class="card"><div style="display:flex;justify-content:space-between">' +
+        '<div><b>' + escapeHtml(g.nama) + '</b><br><span class="muted">' + g.transaksi.length + 'x kunjungan' + (g.hp ? ' · ' + escapeHtml(g.hp) : '') + '</span></div>' +
+        '<span class="mono" style="font-weight:700">' + fmtIDR(g.total) + '</span></div></div>';
+    });
+    return html;
+  }
+
+  html += '<div class="sectionTitle">Riwayat penjualan — ' + escapeHtml(state.outlet) + '</div>';
   if (jual.length === 0) html += '<div class="muted">Belum ada transaksi.</div>';
   jual.forEach(function (j) {
     html += '<div class="card"><div style="display:flex;justify-content:space-between">' +
-      '<div><span class="mono muted">#' + escapeHtml(j.orderNo) + '</span><br>' +
+      '<div><span class="mono muted">#' + escapeHtml(j.orderNo) + '</span>' + (j.pelangganNama ? ' · ' + escapeHtml(j.pelangganNama) : '') + '<br>' +
       '<span style="font-size:12.5px">' + (j.items || []).map(function (it) { return escapeHtml(it.namaProduk) + ' x' + it.qty; }).join(', ') + '</span></div>' +
       '<span class="mono" style="font-weight:700;color:var(--teal)">' + fmtIDR(j.totalBersih) + '</span></div></div>';
   });
@@ -524,6 +585,7 @@ function renderRiwayat() {
   });
   return html;
 }
+function setRiwayatSubView(v) { riwayatSubView = v; renderTab(); }
 
 // ---------- TAB: PRESENSI ----------
 let presensiSaya = [];
@@ -590,6 +652,342 @@ async function absenPulang() {
     await panggilAPI('recordAbsen', { pegawaiId: state.user.username, tipe: 'pulang' });
     showToast('✅ Absen pulang tercatat.', false);
     renderTab();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+// ---------- TAB: KARYAWAN (pemilik) ----------
+let karyawanSubView = 'presensi';
+let presensiSemua = [];
+const BIAYA_KATEGORI = ['Sewa Tempat', 'Listrik & Air', 'Gaji Karyawan', 'Internet & Pulsa', 'Perlengkapan & Peralatan', 'Transportasi', 'Lainnya'];
+
+async function renderKaryawan() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = '<div class="sectionTitle">Karyawan</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:14px">' +
+    '<button class="locTab' + (karyawanSubView === 'presensi' ? ' active' : '') + '" onclick="setKaryawanSubView(\'presensi\')">Presensi</button>' +
+    '<button class="locTab' + (karyawanSubView === 'gaji' ? ' active' : '') + '" onclick="setKaryawanSubView(\'gaji\')">Penggajian</button>' +
+    '<button class="locTab' + (karyawanSubView === 'data' ? ' active' : '') + '" onclick="setKaryawanSubView(\'data\')">Data & Gaji</button>' +
+    '</div><div id="karyawanBody"><span class="spinner"></span></div>';
+  try {
+    presensiSemua = await panggilAPI('getPresensiSemua', {});
+  } catch (e) { presensiSemua = []; }
+  renderKaryawanBody();
+}
+function setKaryawanSubView(v) { karyawanSubView = v; renderKaryawanBody(); }
+
+function renderKaryawanBody() {
+  const el = document.getElementById('karyawanBody');
+  if (karyawanSubView === 'presensi') el.innerHTML = renderRekapPresensi();
+  else if (karyawanSubView === 'gaji') el.innerHTML = renderPenggajian();
+  else el.innerHTML = renderDataKaryawan();
+}
+
+function renderRekapPresensi() {
+  const today = todayStr();
+  let html = '';
+  (state.bootstrap.employees || []).forEach(function (e) {
+    const hariIni = presensiSemua.find(function (p) { return p.pegawaiId === e.id && p.tanggal === today; });
+    html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div><b>' + escapeHtml(e.nama) + '</b><br><span class="muted">' + escapeHtml(e.posisi) + ' · ' + escapeHtml(e.lokasi) + '</span></div>';
+    if (String(e.noLogin).toUpperCase() === 'TRUE') {
+      html += '<div style="display:flex;gap:5px">' +
+        ['hadir', 'telat', 'izin'].map(function (s) {
+          const active = hariIni && hariIni.status === s;
+          const color = s === 'hadir' ? 'var(--teal)' : s === 'telat' ? 'var(--amber)' : 'var(--chili)';
+          return '<button onclick="tandaiPresensiLain(\'' + e.id + '\',\'' + s + '\')" style="padding:5px 9px;border-radius:6px;border:1px solid ' + (active ? color : 'var(--line)') + ';background:' + (active ? color : '#fff') + ';color:' + (active ? '#fff' : '#54605A') + ';font-size:10.5px;font-weight:700">' + s + '</button>';
+        }).join('') + '</div>';
+    } else {
+      const color = hariIni ? (hariIni.status === 'hadir' ? 'var(--teal)' : hariIni.status === 'telat' ? 'var(--amber)' : 'var(--chili)') : '#9A9488';
+      html += '<span class="mono" style="color:' + color + ';font-size:11.5px;font-weight:700">' + (hariIni ? (hariIni.jamMasuk ? 'Masuk ' + hariIni.jamMasuk : hariIni.status) : 'Belum absen') + '</span>';
+    }
+    html += '</div></div>';
+  });
+  return html;
+}
+async function tandaiPresensiLain(pegawaiId, status) {
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    await panggilAPI('setPresensi', { pegawaiId: pegawaiId, status: status });
+    showToast('✅ Presensi tercatat.', false);
+    presensiSemua = await panggilAPI('getPresensiSemua', {});
+    renderKaryawanBody();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+function hitungGaji(id) {
+  const emp = (state.bootstrap.employees || []).find(function (e) { return e.id === id; });
+  const records = presensiSemua.filter(function (p) { return p.pegawaiId === id; });
+  const hadir = records.filter(function (r) { return r.status === 'hadir' || r.status === 'telat'; }).length;
+  const telat = records.filter(function (r) { return r.status === 'telat'; }).length;
+  const izin = records.filter(function (r) { return r.status === 'izin'; }).length;
+  let kotor, potongan;
+  if (emp.tipeGaji === 'harian') { kotor = hadir * emp.nominal; potongan = telat * 10000; }
+  else { kotor = emp.nominal; potongan = 0; }
+  return { emp: emp, hadir: hadir, telat: telat, izin: izin, kotor: kotor, potongan: potongan, bersih: kotor - potongan };
+}
+function periodeSekarang() {
+  return new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+}
+function renderPenggajian() {
+  const periode = periodeSekarang();
+  const biayaList = (state.transaksi && state.transaksi.biaya) || [];
+  let html = '';
+  (state.bootstrap.employees || []).forEach(function (e) {
+    const g = hitungGaji(e.id);
+    const sudah = biayaList.some(function (b) { return b.kategori === 'Gaji Karyawan' && b.keterangan.indexOf(e.nama) !== -1 && b.keterangan.indexOf(periode) !== -1; });
+    html += '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between"><div><b>' + escapeHtml(e.nama) + '</b><br><span class="muted">' + escapeHtml(e.posisi) + ' · ' + (e.tipeGaji === 'harian' ? 'harian' : 'bulanan') + '</span></div>' +
+      (sudah ? '<span style="font-size:10px;font-weight:700;color:var(--teal);background:#E2F0EC;padding:3px 8px;border-radius:20px;height:fit-content">Lunas ' + periode + '</span>' : '') + '</div>';
+    html += '<div style="margin-top:8px;border-top:1px dashed var(--line);padding-top:6px">';
+    if (e.tipeGaji === 'harian') html += '<div style="display:flex;justify-content:space-between;font-size:12.5px"><span>' + g.hadir + ' hari hadir × ' + fmtIDR(e.nominal) + '</span><span class="mono">' + fmtIDR(g.kotor) + '</span></div>';
+    else html += '<div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Gaji pokok bulanan</span><span class="mono">' + fmtIDR(g.kotor) + '</span></div>';
+    if (g.potongan > 0) html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--chili)"><span>Potongan telat (' + g.telat + 'x)</span><span class="mono">-' + fmtIDR(g.potongan) + '</span></div>';
+    html += '<div style="display:flex;justify-content:space-between;font-weight:700;margin-top:4px;padding-top:4px;border-top:1px solid var(--line)"><span>Total diterima</span><span class="mono">' + fmtIDR(g.bersih) + '</span></div></div>';
+    html += sudah
+      ? '<button class="btn" style="margin-top:10px;background:#fff;border:1px solid var(--line);color:#9A9488" disabled>Sudah dibayar bulan ini</button>'
+      : '<button class="btn btn-teal" style="margin-top:10px" onclick="bayarGaji(\'' + e.id + '\',' + g.bersih + ')">💵 Bayar & catat sebagai biaya</button>';
+    html += '</div>';
+  });
+  return html;
+}
+async function bayarGaji(id, jumlah) {
+  const emp = state.bootstrap.employees.find(function (e) { return e.id === id; });
+  showToast('<span class="spinner"></span> Memproses...', false);
+  try {
+    await panggilAPI('recordBiaya', { kategori: 'Gaji Karyawan', keterangan: 'Gaji ' + emp.nama + ' — ' + periodeSekarang(), jumlah: jumlah, oleh: state.user.nama });
+    showToast('✅ Gaji ' + emp.nama + ' dibayar & dicatat sebagai biaya.', false);
+    state.transaksi = await panggilAPI('getTransaksi', {});
+    renderKaryawanBody();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+function renderDataKaryawan() {
+  let html = '';
+  (state.bootstrap.employees || []).forEach(function (e) {
+    html += '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between"><div><b>' + escapeHtml(e.nama) + '</b><br><span class="muted">' + escapeHtml(e.posisi) + ' · ' + escapeHtml(e.lokasi) + '</span></div>' +
+      '<button onclick="toggleEditKaryawan(\'' + e.id + '\')" style="background:none;border:none;color:var(--teal);font-weight:700;font-size:11px">Ubah</button></div>' +
+      '<div id="editBox_' + e.id + '" class="hidden" style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px">' +
+      '<label class="field-label">Tipe gaji</label><select class="field" id="tipe_' + e.id + '"><option value="harian"' + (e.tipeGaji === 'harian' ? ' selected' : '') + '>Harian</option><option value="bulanan"' + (e.tipeGaji === 'bulanan' ? ' selected' : '') + '>Bulanan</option></select>' +
+      '<label class="field-label">Nominal</label><input class="field" type="number" id="nominal_' + e.id + '" value="' + e.nominal + '">' +
+      '<label class="field-label">Nama shift</label><input class="field" id="shiftNama_' + e.id + '" value="' + escapeHtml(e.shiftNama || '') + '">' +
+      '<div style="display:flex;gap:8px"><div style="flex:1"><label class="field-label">Jam mulai</label><input class="field" type="time" id="shiftMulai_' + e.id + '" value="' + (e.shiftMulai || '08:00') + '"></div>' +
+      '<div style="flex:1"><label class="field-label">Jam selesai</label><input class="field" type="time" id="shiftSelesai_' + e.id + '" value="' + (e.shiftSelesai || '17:00') + '"></div></div>' +
+      '<button class="btn btn-teal" onclick="simpanEditKaryawan(\'' + e.id + '\')">Simpan</button>' +
+      '</div>' +
+      '<div style="margin-top:6px;font-size:11.5px" class="mono">' + fmtIDR(e.nominal) + ' / ' + (e.tipeGaji === 'harian' ? 'hari' : 'bulan') +
+      (e.shiftMulai ? ' · shift ' + escapeHtml(e.shiftNama || '') + ' ' + e.shiftMulai + '–' + e.shiftSelesai : '') + '</div>' +
+      '</div>';
+  });
+  html += '<button onclick="toggleTambahKaryawan()" style="display:block;width:100%;background:none;border:1px dashed var(--line);border-radius:10px;padding:10px 0;color:var(--teal);font-weight:700;font-size:12.5px;margin-top:8px">+ Tambah karyawan baru</button>';
+  html += '<div id="formTambahKaryawan" class="hidden card" style="margin-top:10px">' +
+    '<label class="field-label">Nama</label><input class="field" id="nk_nama">' +
+    '<label class="field-label">Posisi</label><input class="field" id="nk_posisi" placeholder="mis. Bantu Dapur">' +
+    '<label class="field-label">Lokasi kerja</label><select class="field" id="nk_lokasi">' +
+    [state.bootstrap.gudangNama].concat(state.bootstrap.outlets).map(function (l) { return '<option value="' + escapeHtml(l) + '">' + escapeHtml(l) + '</option>'; }).join('') + '</select>' +
+    '<label class="field-label">Tipe gaji</label><select class="field" id="nk_tipe"><option value="harian">Harian</option><option value="bulanan">Bulanan</option></select>' +
+    '<label class="field-label">Nominal</label><input class="field" type="number" id="nk_nominal" value="100000">' +
+    '<label class="field-label">Nama shift</label><input class="field" id="nk_shiftNama" value="Pagi">' +
+    '<div style="display:flex;gap:8px"><div style="flex:1"><label class="field-label">Jam mulai</label><input class="field" type="time" id="nk_shiftMulai" value="08:00"></div>' +
+    '<div style="flex:1"><label class="field-label">Jam selesai</label><input class="field" type="time" id="nk_shiftSelesai" value="17:00"></div></div>' +
+    '<label style="display:flex;align-items:center;gap:8px;margin:10px 0;cursor:pointer"><input type="checkbox" id="nk_akses" onchange="toggleAksesFields()"> <span style="font-size:12.5px;font-weight:600">Buatkan akun login</span></label>' +
+    '<div id="nk_aksesFields" class="hidden">' +
+    '<label class="field-label">Username</label><input class="field" id="nk_username" placeholder="mis. yanto1">' +
+    '<label class="field-label">Password</label><input class="field" id="nk_password" value="1234">' +
+    '</div>' +
+    '<button class="btn btn-teal" onclick="simpanKaryawanBaru()">Simpan karyawan</button>' +
+    '</div>';
+  return html;
+}
+function toggleEditKaryawan(id) { document.getElementById('editBox_' + id).classList.toggle('hidden'); }
+function toggleTambahKaryawan() { document.getElementById('formTambahKaryawan').classList.toggle('hidden'); }
+function toggleAksesFields() { document.getElementById('nk_aksesFields').classList.toggle('hidden', !document.getElementById('nk_akses').checked); }
+
+async function simpanEditKaryawan(id) {
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    await panggilAPI('updateEmployee', {
+      id: id, tipeGaji: document.getElementById('tipe_' + id).value, nominal: Number(document.getElementById('nominal_' + id).value),
+      shiftNama: document.getElementById('shiftNama_' + id).value, shiftMulai: document.getElementById('shiftMulai_' + id).value, shiftSelesai: document.getElementById('shiftSelesai_' + id).value,
+    });
+    showToast('✅ Data karyawan diperbarui.', false);
+    await loadBootstrapAndEnter();
+    switchTab('karyawan');
+    karyawanSubView = 'data';
+    renderKaryawanBody();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+async function simpanKaryawanBaru() {
+  const nama = document.getElementById('nk_nama').value.trim();
+  const nominal = Number(document.getElementById('nk_nominal').value);
+  if (!nama || !nominal) return;
+  const beriAkses = document.getElementById('nk_akses').checked;
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    await panggilAPI('addEmployee', {
+      nama: nama, posisi: document.getElementById('nk_posisi').value.trim() || 'Karyawan', lokasi: document.getElementById('nk_lokasi').value,
+      tipeGaji: document.getElementById('nk_tipe').value, nominal: nominal,
+      shiftNama: document.getElementById('nk_shiftNama').value, shiftMulai: document.getElementById('nk_shiftMulai').value, shiftSelesai: document.getElementById('nk_shiftSelesai').value,
+      beriAkses: beriAkses, username: document.getElementById('nk_username').value.trim(), password: document.getElementById('nk_password').value.trim(),
+      role: document.getElementById('nk_lokasi').value === state.bootstrap.gudangNama ? 'gudang' : 'kasir',
+    });
+    showToast('✅ Karyawan baru ditambahkan.', false);
+    await loadBootstrapAndEnter();
+    switchTab('karyawan');
+    karyawanSubView = 'data';
+    renderKaryawanBody();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+// ---------- TAB: BIAYA ----------
+function renderBiaya() {
+  const biayaList = (state.transaksi && state.transaksi.biaya) || [];
+  const total = biayaList.reduce(function (s, b) { return s + Number(b.jumlah); }, 0);
+  let html = '<div class="sectionTitle">Catat pengeluaran operasional</div><div class="card">' +
+    '<label class="field-label">Kategori</label><select class="field" id="biayaKategori">' +
+    BIAYA_KATEGORI.map(function (k) { return '<option value="' + k + '">' + k + '</option>'; }).join('') + '</select>' +
+    '<label class="field-label">Keterangan</label><input class="field" id="biayaKeterangan" placeholder="mis. Listrik bulan ini">' +
+    '<label class="field-label">Jumlah (Rp)</label><input class="field" type="number" id="biayaJumlah" value="0">' +
+    '<button class="btn btn-chili" onclick="submitBiaya()">+ Catat pengeluaran</button></div>';
+  html += '<div class="card" style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:12.5px">Total biaya tercatat</span><span class="mono" style="font-weight:700;font-size:15px;color:var(--chili)">' + fmtIDR(total) + '</span></div>';
+  html += '<div class="sectionTitle" style="margin-top:16px">Riwayat pengeluaran</div>';
+  if (biayaList.length === 0) html += '<div class="muted">Belum ada biaya tercatat.</div>';
+  biayaList.forEach(function (b) {
+    html += '<div class="card" style="display:flex;justify-content:space-between;padding:9px 12px"><div><div style="font-size:13px;font-weight:600">' + escapeHtml(b.keterangan) + '</div><div class="muted">' + escapeHtml(b.kategori) + ' · ' + escapeHtml(b.oleh) + '</div></div><span class="mono" style="font-weight:700;color:var(--chili)">-' + fmtIDR(b.jumlah) + '</span></div>';
+  });
+  return html;
+}
+async function submitBiaya() {
+  const kategori = document.getElementById('biayaKategori').value;
+  const keterangan = document.getElementById('biayaKeterangan').value.trim() || kategori;
+  const jumlah = Number(document.getElementById('biayaJumlah').value);
+  if (!jumlah || jumlah <= 0) return;
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    await panggilAPI('recordBiaya', { kategori: kategori, keterangan: keterangan, jumlah: jumlah, oleh: state.user.nama });
+    showToast('✅ Biaya tercatat.', false);
+    state.transaksi = await panggilAPI('getTransaksi', {});
+    renderTab();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+// ---------- TAB: LAPORAN ----------
+let laporanSubView = 'ringkasan';
+function renderLaporan() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = '<div class="sectionTitle">Laporan keuangan</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:14px">' +
+    '<button class="locTab' + (laporanSubView === 'ringkasan' ? ' active' : '') + '" onclick="setLaporanSubView(\'ringkasan\')">Ringkasan</button>' +
+    '<button class="locTab' + (laporanSubView === 'kas' ? ' active' : '') + '" onclick="setLaporanSubView(\'kas\')">Buku Kas</button>' +
+    '</div><div id="laporanBody"></div>';
+  renderLaporanBody();
+}
+function setLaporanSubView(v) { laporanSubView = v; renderLaporanBody(); }
+function renderLaporanBody() {
+  document.getElementById('laporanBody').innerHTML = laporanSubView === 'ringkasan' ? renderLaporanRingkasan() : renderBukuKas();
+}
+function renderLaporanRingkasan() {
+  const t = state.transaksi || { jual: [], beli: [], transfer: [], biaya: [] };
+  const jual = t.jual;
+  const pendapatanKotor = jual.reduce(function (s, j) { return s + Number(j.totalKotor); }, 0);
+  const komisi = jual.reduce(function (s, j) { return s + Number(j.komisi); }, 0);
+  const pendapatanBersih = pendapatanKotor - komisi;
+  const pengeluaranBahan = t.beli.reduce(function (s, b) { return s + Number(b.totalHarga || 0); }, 0);
+  const labaKotor = pendapatanBersih - pengeluaranBahan;
+  const totalBiaya = (t.biaya || []).reduce(function (s, b) { return s + Number(b.jumlah); }, 0);
+  const labaBersih = labaKotor - totalBiaya;
+
+  let html = '<div class="card">';
+  html += lineItem('Pendapatan kotor', pendapatanKotor, false);
+  if (komisi > 0) html += lineItem('Dipotong komisi platform online', -komisi, true);
+  html += lineItem('Pendapatan bersih', pendapatanBersih, false, true);
+  html += lineItem('Biaya bahan baku', -pengeluaranBahan, true);
+  html += lineItem('Laba kotor', labaKotor, false, true);
+  html += lineItem('Biaya operasional', -totalBiaya, true);
+  html += '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><span style="font-weight:700;font-size:13.5px">Laba bersih</span><span class="mono" style="font-weight:700;font-size:14px;color:' + (labaBersih >= 0 ? 'var(--teal)' : 'var(--chili)') + '">' + fmtIDR(labaBersih) + '</span></div>';
+  html += '</div>';
+
+  const perOutlet = state.bootstrap.outlets.map(function (o) { return { outlet: o, total: jual.filter(function (j) { return j.lokasi === o; }).reduce(function (s, j) { return s + Number(j.totalKotor); }, 0) }; });
+  const maxOutlet = Math.max(1, Math.max.apply(null, perOutlet.map(function (o) { return o.total; })));
+  html += '<div class="sectionTitle" style="margin-top:16px">Pendapatan per outlet</div>';
+  perOutlet.forEach(function (o) {
+    html += '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="font-weight:600">' + escapeHtml(o.outlet) + '</span><span class="mono" style="font-weight:700">' + fmtIDR(o.total) + '</span></div>' +
+      '<div class="stokBar"><div style="width:' + (o.total / maxOutlet * 100) + '%;background:var(--teal)"></div></div></div>';
+  });
+
+  const produkMap = {};
+  jual.forEach(function (j) { (j.items || []).forEach(function (it) {
+    if (!produkMap[it.namaProduk]) produkMap[it.namaProduk] = { nama: it.namaProduk, qty: 0, total: 0 };
+    produkMap[it.namaProduk].qty += Number(it.qty);
+    produkMap[it.namaProduk].total += Number(it.subtotal);
+  }); });
+  const top5 = Object.values(produkMap).sort(function (a, b) { return b.total - a.total; }).slice(0, 5);
+  if (top5.length > 0) {
+    html += '<div class="sectionTitle" style="margin-top:16px">Produk terlaris</div>';
+    top5.forEach(function (p, i) {
+      html += '<div class="card" style="display:flex;justify-content:space-between;padding:9px 12px"><span><span class="mono muted">' + (i + 1) + '</span> ' + escapeHtml(p.nama) + ' <span class="muted">(' + p.qty + ' terjual)</span></span><span class="mono" style="font-weight:700">' + fmtIDR(p.total) + '</span></div>';
+    });
+  }
+  return html;
+}
+function lineItem(label, value, negative, bold) {
+  return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:' + (bold ? '13px;font-weight:700' : '12.5px') + '">' +
+    '<span>' + label + '</span><span class="mono" style="color:' + (negative ? 'var(--chili)' : 'var(--ink)') + '">' + (value < 0 ? '-' : '') + fmtIDR(Math.abs(value)) + '</span></div>';
+}
+function renderBukuKas() {
+  const t = state.transaksi || { jual: [], beli: [], transfer: [], biaya: [] };
+  const entries = t.jual.map(function (j) { return { waktu: new Date(j.waktu), judul: '#' + j.orderNo, lokasi: j.lokasi, masuk: Number(j.totalBersih), keluar: 0 }; })
+    .concat(t.beli.map(function (b) { return { waktu: new Date(b.waktu), judul: 'Beli ' + b.bahanId, lokasi: state.bootstrap.gudangNama, masuk: 0, keluar: Number(b.totalHarga || 0) }; }))
+    .concat((t.biaya || []).map(function (b) { return { waktu: new Date(b.waktu), judul: b.keterangan, lokasi: b.kategori, masuk: 0, keluar: Number(b.jumlah) }; }))
+    .sort(function (a, b) { return a.waktu - b.waktu; });
+  let saldo = 0;
+  const rows = entries.map(function (e) { saldo += e.masuk - e.keluar; return Object.assign({}, e, { saldo: saldo }); });
+  const totalMasuk = rows.reduce(function (s, r) { return s + r.masuk; }, 0);
+  const totalKeluar = rows.reduce(function (s, r) { return s + r.keluar; }, 0);
+
+  let html = '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+    '<div class="card" style="flex:1"><div class="muted">Total masuk</div><div class="mono" style="font-weight:700;font-size:15px;color:var(--teal)">' + fmtIDR(totalMasuk) + '</div></div>' +
+    '<div class="card" style="flex:1"><div class="muted">Total keluar</div><div class="mono" style="font-weight:700;font-size:15px;color:var(--chili)">' + fmtIDR(totalKeluar) + '</div></div></div>';
+  html += '<div class="card" style="display:flex;justify-content:space-between;margin-bottom:14px"><span style="font-weight:700;font-size:12.5px">Saldo kas</span><span class="mono" style="font-weight:700;font-size:16px;color:' + (saldo >= 0 ? 'var(--teal)' : 'var(--chili)') + '">' + fmtIDR(saldo) + '</span></div>';
+  rows.slice().reverse().forEach(function (r) {
+    html += '<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)">' +
+      '<div><div style="font-size:12.5px;font-weight:600">' + escapeHtml(r.judul) + '</div><div class="muted">' + r.waktu.toLocaleDateString('id-ID') + ' · ' + escapeHtml(r.lokasi) + '</div></div>' +
+      '<div style="text-align:right"><div class="mono" style="font-weight:700;color:' + (r.masuk > 0 ? 'var(--teal)' : 'var(--chili)') + '">' + (r.masuk > 0 ? '+' + fmtIDR(r.masuk) : '-' + fmtIDR(r.keluar)) + '</div><div class="mono muted" style="font-size:10px">saldo ' + fmtIDR(r.saldo) + '</div></div></div>';
+  });
+  return html;
+}
+
+// ---------- TAB: RESEP & KETERSEDIAAN PRODUK ----------
+function renderResep() {
+  const produk = state.bootstrap.produk;
+  const bahanMap = {};
+  state.bootstrap.bahan.forEach(function (b) { bahanMap[b.id] = b; });
+  let html = '<div class="sectionTitle">Resep & ketersediaan produk</div>';
+  produk.forEach(function (p) {
+    html += '<div class="card"><div style="display:flex;justify-content:space-between"><b>' + escapeHtml(p.nama) + '</b>' +
+      '<span class="mono muted" style="font-size:11px">' + fmtIDR(p.harga) + '<br>online ' + fmtIDR(p.hargaOnline) + '</span></div>';
+    html += '<div style="display:flex;gap:6px;margin:8px 0">';
+    state.bootstrap.outlets.forEach(function (o) {
+      const aktif = p.outlets.indexOf(o) !== -1;
+      html += '<button onclick="toggleProduk(\'' + p.id + '\',\'' + escapeHtml(o) + '\')" style="padding:5px 10px;border-radius:20px;border:1.5px solid ' + (aktif ? 'var(--teal)' : 'var(--line)') + ';background:' + (aktif ? 'var(--teal)' : '#fff') + ';color:' + (aktif ? '#fff' : '#9A9488') + ';font-size:11px;font-weight:700">' + (aktif ? '✓ ' : '') + o.replace('Outlet ', '') + '</button>';
+    });
+    html += '</div>';
+    if (p.outlets.length === 0) html += '<div style="color:var(--chili);font-size:11px;margin-bottom:8px">Tidak dijual di outlet manapun sekarang.</div>';
+    html += '<div style="border-top:1px dashed var(--line);padding-top:8px">';
+    (p.resep || []).forEach(function (r, i) {
+      const b = bahanMap[r.b];
+      html += '<div style="display:flex;justify-content:space-between;font-size:12px" class="mono"><span>' + (b ? escapeHtml(b.nama) : r.b) + '</span><span>' + r.qty + (b ? b.satuan : '') + '</span></div>';
+    });
+    html += '</div></div>';
+  });
+  return html;
+}
+async function toggleProduk(produkId, lokasi) {
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    await panggilAPI('toggleProdukOutlet', { produkId: produkId, lokasi: lokasi });
+    await loadBootstrapAndEnter();
+    switchTab('resep');
   } catch (e) { showToast('❌ ' + e.message, true); }
 }
 
