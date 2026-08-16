@@ -186,7 +186,7 @@ const TABS = [
   { id: 'karyawan', label: 'Karyawan' },
   { id: 'biaya', label: 'Biaya' },
   { id: 'laporan', label: 'Laporan' },
-  { id: 'resep', label: 'Resep' },
+  { id: 'resep', label: 'Data' },
 ];
 const PERMISSIONS = {
   kasir: ['jual', 'stok', 'riwayat', 'presensi'],
@@ -361,7 +361,7 @@ function renderTab() {
   if (state.tab === 'karyawan') renderKaryawan();
   if (state.tab === 'biaya') main.innerHTML = renderBiaya();
   if (state.tab === 'laporan') renderLaporan();
-  if (state.tab === 'resep') main.innerHTML = renderResep();
+  if (state.tab === 'resep') renderResep();
 }
 
 // ---------- TAB: JUAL ----------
@@ -780,7 +780,8 @@ function renderDataKaryawan() {
   (state.bootstrap.employees || []).forEach(function (e) {
     html += '<div class="card">' +
       '<div style="display:flex;justify-content:space-between"><div><b>' + escapeHtml(e.nama) + '</b><br><span class="muted">' + escapeHtml(e.posisi) + ' · ' + escapeHtml(e.lokasi) + '</span></div>' +
-      '<button onclick="toggleEditKaryawan(\'' + e.id + '\')" style="background:none;border:none;color:var(--teal);font-weight:700;font-size:11px">Ubah</button></div>' +
+      '<div style="display:flex;gap:8px"><button onclick="toggleEditKaryawan(\'' + e.id + '\')" style="background:none;border:none;color:var(--teal);font-weight:700;font-size:11px">Ubah</button>' +
+      '<button onclick="hapusKaryawan(\'' + e.id + '\')" style="background:none;border:none;color:var(--chili);font-weight:700;font-size:11px">Hapus</button></div></div>' +
       '<div id="editBox_' + e.id + '" class="hidden" style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px">' +
       '<label class="field-label">Tipe gaji</label><select class="field" id="tipe_' + e.id + '"><option value="harian"' + (e.tipeGaji === 'harian' ? ' selected' : '') + '>Harian</option><option value="bulanan"' + (e.tipeGaji === 'bulanan' ? ' selected' : '') + '>Bulanan</option></select>' +
       '<label class="field-label">Nominal</label><input class="field" type="number" id="nominal_' + e.id + '" value="' + e.nominal + '">' +
@@ -815,6 +816,18 @@ function renderDataKaryawan() {
 }
 function toggleEditKaryawan(id) { document.getElementById('editBox_' + id).classList.toggle('hidden'); }
 function toggleTambahKaryawan() { document.getElementById('formTambahKaryawan').classList.toggle('hidden'); }
+async function hapusKaryawan(id) {
+  if (!confirm('Hapus karyawan ini? Riwayat presensinya juga akan terhapus.')) return;
+  showToast('<span class="spinner"></span> Menghapus...', false);
+  try {
+    await panggilAPI('deleteEmployee', { id: id });
+    showToast('✅ Karyawan dihapus.', false);
+    await loadBootstrapAndEnter();
+    switchTab('karyawan');
+    karyawanSubView = 'data';
+    renderKaryawanBody();
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
 function toggleAksesFields() { document.getElementById('nk_aksesFields').classList.toggle('hidden', !document.getElementById('nk_akses').checked); }
 
 async function simpanEditKaryawan(id) {
@@ -971,35 +984,268 @@ function renderBukuKas() {
   return html;
 }
 
-// ---------- TAB: RESEP & KETERSEDIAAN PRODUK ----------
+// ---------- TAB: DATA MASTER (Produk, Bahan Baku, Supplier) ----------
+let dataSubView = 'produk';
 function renderResep() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = '<div class="sectionTitle">Data master</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:14px">' +
+    '<button class="locTab' + (dataSubView === 'produk' ? ' active' : '') + '" onclick="setDataSubView(\'produk\')">Produk</button>' +
+    '<button class="locTab' + (dataSubView === 'bahan' ? ' active' : '') + '" onclick="setDataSubView(\'bahan\')">Bahan Baku</button>' +
+    '<button class="locTab' + (dataSubView === 'supplier' ? ' active' : '') + '" onclick="setDataSubView(\'supplier\')">Supplier</button>' +
+    '</div><div id="dataBody"></div>';
+  renderDataBody();
+  return '';
+}
+function setDataSubView(v) { dataSubView = v; renderDataBody(); }
+function renderDataBody() {
+  const el = document.getElementById('dataBody');
+  if (dataSubView === 'produk') el.innerHTML = renderProdukCRUD();
+  else if (dataSubView === 'bahan') el.innerHTML = renderBahanCRUD();
+  else el.innerHTML = renderSupplierCRUD();
+}
+
+// ---- PRODUK + RESEP ----
+function renderProdukCRUD() {
   const produk = state.bootstrap.produk;
   const bahanMap = {};
   state.bootstrap.bahan.forEach(function (b) { bahanMap[b.id] = b; });
-  let html = '<div class="sectionTitle">Resep & ketersediaan produk</div>';
+  let html = '';
   produk.forEach(function (p) {
     html += '<div class="card"><div style="display:flex;justify-content:space-between"><b>' + escapeHtml(p.nama) + '</b>' +
-      '<span class="mono muted" style="font-size:11px">' + fmtIDR(p.harga) + '<br>online ' + fmtIDR(p.hargaOnline) + '</span></div>';
+      '<div style="text-align:right"><span class="mono muted" style="font-size:11px">' + fmtIDR(p.harga) + ' / ' + fmtIDR(p.hargaOnline) + ' online</span></div></div>';
     html += '<div style="display:flex;gap:6px;margin:8px 0">';
     state.bootstrap.outlets.forEach(function (o) {
       const aktif = p.outlets.indexOf(o) !== -1;
       html += '<button onclick="toggleProduk(\'' + p.id + '\',\'' + escapeHtml(o) + '\')" style="padding:5px 10px;border-radius:20px;border:1.5px solid ' + (aktif ? 'var(--teal)' : 'var(--line)') + ';background:' + (aktif ? 'var(--teal)' : '#fff') + ';color:' + (aktif ? '#fff' : '#9A9488') + ';font-size:11px;font-weight:700">' + (aktif ? '✓ ' : '') + o.replace('Outlet ', '') + '</button>';
     });
     html += '</div>';
-    if (p.outlets.length === 0) html += '<div style="color:var(--chili);font-size:11px;margin-bottom:8px">Tidak dijual di outlet manapun sekarang.</div>';
     html += '<div style="border-top:1px dashed var(--line);padding-top:8px">';
-    (p.resep || []).forEach(function (r, i) {
+    (p.resep || []).forEach(function (r) {
       const b = bahanMap[r.b];
       html += '<div style="display:flex;justify-content:space-between;font-size:12px" class="mono"><span>' + (b ? escapeHtml(b.nama) : r.b) + '</span><span>' + r.qty + (b ? b.satuan : '') + '</span></div>';
     });
-    html += '</div></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;margin-top:8px">' +
+      '<button onclick="editProduk(\'' + p.id + '\')" style="flex:1;background:none;border:1px solid var(--line);border-radius:7px;padding:7px 0;color:var(--teal);font-weight:700;font-size:11.5px">Ubah</button>' +
+      '<button onclick="hapusProduk(\'' + p.id + '\')" style="flex:1;background:none;border:1px solid var(--chili);border-radius:7px;padding:7px 0;color:var(--chili);font-weight:700;font-size:11.5px">Hapus</button></div>';
+    html += '</div>';
   });
+  html += '<button onclick="bukaFormProduk()" style="display:block;width:100%;background:none;border:1px dashed var(--line);border-radius:10px;padding:10px 0;color:var(--teal);font-weight:700;font-size:12.5px;margin-top:8px">+ Tambah produk baru</button>';
+  html += '<div id="formProduk" class="hidden"></div>';
   return html;
+}
+
+let resepBaris = []; // { bahanId, qty }
+function bukaFormProduk(existing) {
+  const p = existing || null;
+  resepBaris = p ? p.resep.map(function (r) { return { bahanId: r.b, qty: r.qty }; }) : [];
+  const box = document.getElementById('formProduk');
+  box.classList.remove('hidden');
+  box.innerHTML = renderFormProdukHtml(p);
+}
+function renderFormProdukHtml(p) {
+  let html = '<div class="card" style="margin-top:10px">' +
+    '<input type="hidden" id="fp_id" value="' + (p ? p.id : '') + '">' +
+    '<label class="field-label">Nama produk</label><input class="field" id="fp_nama" value="' + (p ? escapeHtml(p.nama) : '') + '">' +
+    '<label class="field-label">Kategori</label><input class="field" id="fp_kategori" value="' + (p ? escapeHtml(p.kategori) : 'Makanan') + '">' +
+    '<label class="field-label">Harga offline</label><input class="field" type="number" id="fp_harga" value="' + (p ? p.harga : 0) + '">' +
+    '<label class="field-label">Harga online</label><input class="field" type="number" id="fp_hargaOnline" value="' + (p ? p.hargaOnline : 0) + '">' +
+    '<div class="sectionTitle" style="margin-top:10px">Resep (bahan per porsi)</div><div id="resepList"></div>' +
+    '<button onclick="tambahBarisResep()" style="background:none;border:none;color:var(--teal);font-weight:700;font-size:12px;margin-top:4px">+ Tambah bahan</button>' +
+    '<button class="btn btn-teal" style="margin-top:12px" onclick="simpanProduk()">Simpan produk</button>' +
+    '<button onclick="tutupFormProduk()" style="display:block;width:100%;background:none;border:1px solid var(--line);border-radius:9px;padding:9px 0;margin-top:6px;color:#54605A;font-weight:700;font-size:12.5px">Batal</button>' +
+    '</div>';
+  setTimeout(renderResepList, 0);
+  return html;
+}
+function renderResepList() {
+  const el = document.getElementById('resepList');
+  if (!el) return;
+  el.innerHTML = resepBaris.map(function (r, i) {
+    return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">' +
+      '<select style="flex:2;padding:8px;border-radius:7px;border:1px solid var(--line);font-size:12px" onchange="resepBaris[' + i + '].bahanId=this.value">' +
+      state.bootstrap.bahan.map(function (b) { return '<option value="' + b.id + '"' + (b.id === r.bahanId ? ' selected' : '') + '>' + escapeHtml(b.nama) + '</option>'; }).join('') + '</select>' +
+      '<input type="number" value="' + r.qty + '" style="flex:1;padding:8px;border-radius:7px;border:1px solid var(--line);font-size:12px" oninput="resepBaris[' + i + '].qty=Number(this.value)">' +
+      '<button onclick="hapusBarisResep(' + i + ')" style="background:none;border:none;color:var(--chili);font-weight:700">✕</button></div>';
+  }).join('');
+}
+function tambahBarisResep() {
+  resepBaris.push({ bahanId: state.bootstrap.bahan[0] ? state.bootstrap.bahan[0].id : '', qty: 10 });
+  renderResepList();
+}
+function hapusBarisResep(i) { resepBaris.splice(i, 1); renderResepList(); }
+function tutupFormProduk() { document.getElementById('formProduk').classList.add('hidden'); document.getElementById('formProduk').innerHTML = ''; }
+function editProduk(id) {
+  const p = state.bootstrap.produk.find(function (x) { return x.id === id; });
+  bukaFormProduk(p);
+}
+async function simpanProduk() {
+  const id = document.getElementById('fp_id').value;
+  const nama = document.getElementById('fp_nama').value.trim();
+  if (!nama) return;
+  const payload = {
+    nama: nama, kategori: document.getElementById('fp_kategori').value.trim(),
+    harga: Number(document.getElementById('fp_harga').value), hargaOnline: Number(document.getElementById('fp_hargaOnline').value),
+    resep: resepBaris.filter(function (r) { return r.bahanId && r.qty > 0; }),
+  };
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    if (id) { payload.id = id; await panggilAPI('updateProduk', payload); }
+    else { payload.outlets = state.bootstrap.outlets.slice(); await panggilAPI('addProduk', payload); }
+    showToast('✅ Produk disimpan.', false);
+    await loadBootstrapAndEnter();
+    switchTab('resep');
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+async function hapusProduk(id) {
+  if (!confirm('Hapus produk ini? Tindakan ini tidak bisa dibatalkan.')) return;
+  showToast('<span class="spinner"></span> Menghapus...', false);
+  try {
+    await panggilAPI('deleteProduk', { id: id });
+    showToast('✅ Produk dihapus.', false);
+    await loadBootstrapAndEnter();
+    switchTab('resep');
+  } catch (e) { showToast('❌ ' + e.message, true); }
 }
 async function toggleProduk(produkId, lokasi) {
   showToast('<span class="spinner"></span> Menyimpan...', false);
   try {
     await panggilAPI('toggleProdukOutlet', { produkId: produkId, lokasi: lokasi });
+    await loadBootstrapAndEnter();
+    switchTab('resep');
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+// ---- BAHAN BAKU ----
+function renderBahanCRUD() {
+  let html = '';
+  state.bootstrap.bahan.forEach(function (b) {
+    html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div><b>' + escapeHtml(b.nama) + '</b><br><span class="muted">satuan: ' + escapeHtml(b.satuan) + ' · min: ' + b.stokMinimum + '</span></div>' +
+      '<div style="display:flex;gap:6px">' +
+      '<button onclick="editBahan(\'' + b.id + '\')" style="background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;color:var(--teal);font-weight:700;font-size:11px">Ubah</button>' +
+      '<button onclick="hapusBahan(\'' + b.id + '\')" style="background:none;border:1px solid var(--chili);border-radius:7px;padding:6px 10px;color:var(--chili);font-weight:700;font-size:11px">Hapus</button></div>' +
+      '</div><div id="formBahan_' + b.id + '" class="hidden"></div></div>';
+  });
+  html += '<button onclick="bukaFormBahan()" style="display:block;width:100%;background:none;border:1px dashed var(--line);border-radius:10px;padding:10px 0;color:var(--teal);font-weight:700;font-size:12.5px;margin-top:8px">+ Tambah bahan baku baru</button>';
+  html += '<div id="formBahanBaru" class="hidden"></div>';
+  return html;
+}
+function formBahanHtml(b, boxId) {
+  return '<div class="card" style="margin-top:8px">' +
+    '<label class="field-label">Nama bahan</label><input class="field" id="fb_nama_' + boxId + '" value="' + (b ? escapeHtml(b.nama) : '') + '">' +
+    '<label class="field-label">Satuan (g/ml/pcs)</label><input class="field" id="fb_satuan_' + boxId + '" value="' + (b ? escapeHtml(b.satuan) : 'g') + '">' +
+    '<label class="field-label">Stok minimum (buat warning)</label><input class="field" type="number" id="fb_min_' + boxId + '" value="' + (b ? b.stokMinimum : 500) + '">' +
+    '<button class="btn btn-teal" onclick="simpanBahan(\'' + (b ? b.id : '') + '\',\'' + boxId + '\')">Simpan</button></div>';
+}
+function bukaFormBahan() {
+  const box = document.getElementById('formBahanBaru');
+  box.classList.remove('hidden');
+  box.innerHTML = formBahanHtml(null, 'baru');
+}
+function editBahan(id) {
+  const b = state.bootstrap.bahan.find(function (x) { return x.id === id; });
+  const box = document.getElementById('formBahan_' + id);
+  box.classList.remove('hidden');
+  box.innerHTML = formBahanHtml(b, id);
+}
+async function simpanBahan(id, boxId) {
+  const nama = document.getElementById('fb_nama_' + boxId).value.trim();
+  if (!nama) return;
+  const payload = { nama: nama, satuan: document.getElementById('fb_satuan_' + boxId).value.trim(), stokMinimum: Number(document.getElementById('fb_min_' + boxId).value) };
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    if (id) { payload.id = id; await panggilAPI('updateBahan', payload); }
+    else { await panggilAPI('addBahan', payload); }
+    showToast('✅ Bahan baku disimpan.', false);
+    await loadBootstrapAndEnter();
+    switchTab('resep');
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+async function hapusBahan(id) {
+  if (!confirm('Hapus bahan baku ini?')) return;
+  showToast('<span class="spinner"></span> Menghapus...', false);
+  try {
+    await panggilAPI('deleteBahan', { id: id });
+    showToast('✅ Bahan baku dihapus.', false);
+    await loadBootstrapAndEnter();
+    switchTab('resep');
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+
+// ---- SUPPLIER ----
+function renderSupplierCRUD() {
+  let html = '';
+  (state.bootstrap.supplier || []).forEach(function (s) {
+    html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+      '<div><b>' + escapeHtml(s.nama) + '</b><br><span class="muted">' + escapeHtml(s.kontak) + '<br>' + escapeHtml(s.alamat) + '</span>' +
+      '<div style="margin-top:6px">' + s.bahan.map(function (bid) {
+        const b = state.bootstrap.bahan.find(function (x) { return x.id === bid; });
+        return '<span style="font-size:10px;font-weight:600;background:#fff;border:1px solid var(--line);border-radius:20px;padding:2px 8px;margin-right:4px">' + (b ? escapeHtml(b.nama) : bid) + '</span>';
+      }).join('') + '</div></div>' +
+      '<div style="display:flex;flex-direction:column;gap:5px">' +
+      '<button onclick="editSupplier(\'' + s.id + '\')" style="background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;color:var(--teal);font-weight:700;font-size:11px">Ubah</button>' +
+      '<button onclick="hapusSupplier(\'' + s.id + '\')" style="background:none;border:1px solid var(--chili);border-radius:7px;padding:6px 10px;color:var(--chili);font-weight:700;font-size:11px">Hapus</button></div>' +
+      '</div><div id="formSupplier_' + s.id + '" class="hidden"></div></div>';
+  });
+  html += '<button onclick="bukaFormSupplier()" style="display:block;width:100%;background:none;border:1px dashed var(--line);border-radius:10px;padding:10px 0;color:var(--teal);font-weight:700;font-size:12.5px;margin-top:8px">+ Tambah supplier baru</button>';
+  html += '<div id="formSupplierBaru" class="hidden"></div>';
+  return html;
+}
+let supplierBahanTerpilih = [];
+function formSupplierHtml(s, boxId) {
+  supplierBahanTerpilih = s ? s.bahan.slice() : [];
+  return '<div class="card" style="margin-top:8px">' +
+    '<label class="field-label">Nama supplier</label><input class="field" id="fs_nama_' + boxId + '" value="' + (s ? escapeHtml(s.nama) : '') + '">' +
+    '<label class="field-label">Kontak</label><input class="field" id="fs_kontak_' + boxId + '" value="' + (s ? escapeHtml(s.kontak) : '') + '">' +
+    '<label class="field-label">Alamat</label><input class="field" id="fs_alamat_' + boxId + '" value="' + (s ? escapeHtml(s.alamat) : '') + '">' +
+    '<label class="field-label">Bahan yang disuplai</label><div id="fs_bahan_' + boxId + '" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">' +
+    state.bootstrap.bahan.map(function (b) {
+      const aktif = supplierBahanTerpilih.indexOf(b.id) !== -1;
+      return '<button onclick="toggleBahanSupplier(\'' + b.id + '\',\'' + boxId + '\')" id="chip_' + boxId + '_' + b.id + '" style="padding:5px 10px;border-radius:20px;border:1.5px solid ' + (aktif ? 'var(--teal)' : 'var(--line)') + ';background:' + (aktif ? 'var(--teal)' : '#fff') + ';color:' + (aktif ? '#fff' : '#9A9488') + ';font-size:11px;font-weight:700">' + escapeHtml(b.nama) + '</button>';
+    }).join('') + '</div>' +
+    '<button class="btn btn-teal" onclick="simpanSupplier(\'' + (s ? s.id : '') + '\',\'' + boxId + '\')">Simpan</button></div>';
+}
+function toggleBahanSupplier(bahanId, boxId) {
+  const idx = supplierBahanTerpilih.indexOf(bahanId);
+  if (idx === -1) supplierBahanTerpilih.push(bahanId); else supplierBahanTerpilih.splice(idx, 1);
+  const chip = document.getElementById('chip_' + boxId + '_' + bahanId);
+  const aktif = supplierBahanTerpilih.indexOf(bahanId) !== -1;
+  chip.style.background = aktif ? 'var(--teal)' : '#fff';
+  chip.style.borderColor = aktif ? 'var(--teal)' : 'var(--line)';
+  chip.style.color = aktif ? '#fff' : '#9A9488';
+}
+function bukaFormSupplier() {
+  const box = document.getElementById('formSupplierBaru');
+  box.classList.remove('hidden');
+  box.innerHTML = formSupplierHtml(null, 'baru');
+}
+function editSupplier(id) {
+  const s = state.bootstrap.supplier.find(function (x) { return x.id === id; });
+  const box = document.getElementById('formSupplier_' + id);
+  box.classList.remove('hidden');
+  box.innerHTML = formSupplierHtml(s, id);
+}
+async function simpanSupplier(id, boxId) {
+  const nama = document.getElementById('fs_nama_' + boxId).value.trim();
+  if (!nama) return;
+  const payload = { nama: nama, kontak: document.getElementById('fs_kontak_' + boxId).value.trim(), alamat: document.getElementById('fs_alamat_' + boxId).value.trim(), bahan: supplierBahanTerpilih };
+  showToast('<span class="spinner"></span> Menyimpan...', false);
+  try {
+    if (id) { payload.id = id; await panggilAPI('updateSupplier', payload); }
+    else { await panggilAPI('addSupplier', payload); }
+    showToast('✅ Supplier disimpan.', false);
+    await loadBootstrapAndEnter();
+    switchTab('resep');
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+async function hapusSupplier(id) {
+  if (!confirm('Hapus supplier ini?')) return;
+  showToast('<span class="spinner"></span> Menghapus...', false);
+  try {
+    await panggilAPI('deleteSupplier', { id: id });
+    showToast('✅ Supplier dihapus.', false);
     await loadBootstrapAndEnter();
     switchTab('resep');
   } catch (e) { showToast('❌ ' + e.message, true); }
