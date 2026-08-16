@@ -215,9 +215,17 @@ function showToast(msg, isErr) {
 function initApp() {
   if (!API_URL) {
     document.getElementById('setupScreen').classList.remove('hidden');
-  } else {
-    document.getElementById('loginScreen').classList.remove('hidden');
+    return;
   }
+  const savedUser = localStorage.getItem('warkas_user');
+  if (savedUser) {
+    try {
+      state.user = JSON.parse(savedUser);
+      loadBootstrapAndEnter();
+      return;
+    } catch (e) { /* data tersimpan rusak, lanjut ke login biasa */ }
+  }
+  document.getElementById('loginScreen').classList.remove('hidden');
 }
 async function saveApiUrl() {
   const url = document.getElementById('setupUrl').value.trim();
@@ -254,6 +262,7 @@ async function doLogin() {
   try {
     const user = await panggilAPI('login', { username: username, password: password });
     state.user = user;
+    localStorage.setItem('warkas_user', JSON.stringify(user));
     await loadBootstrapAndEnter();
   } catch (e) {
     btn.disabled = false;
@@ -264,6 +273,7 @@ async function doLogin() {
 }
 
 function logout() {
+  localStorage.removeItem('warkas_user');
   state = { user: null, outlet: null, bootstrap: null, transaksi: null, tab: 'jual', cart: [], channel: 'offline' };
   document.getElementById('appScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -280,13 +290,17 @@ async function loadBootstrapAndEnter() {
     const role = state.user.role;
     state.outlet = state.user.outlet || (role === 'gudang' ? boot.gudangNama : boot.outlets[0]);
     if (PERMISSIONS[role].indexOf(state.tab) === -1) state.tab = PERMISSIONS[role][0];
+    document.getElementById('setupScreen').classList.add('hidden');
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('appScreen').classList.remove('hidden');
     renderHeader();
     renderTabbar();
     await loadTransaksiThenRender();
   } catch (e) {
-    alert('Gagal mengambil data: ' + e.message);
+    localStorage.removeItem('warkas_user');
+    document.getElementById('appScreen').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    alert('Gagal mengambil data: ' + e.message + '. Silakan login lagi.');
   }
 }
 
